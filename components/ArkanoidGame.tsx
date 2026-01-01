@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 interface Brick {
   x: number;
@@ -63,6 +63,20 @@ interface Star {
 
 type GameState = "ready" | "playing" | "paused" | "gameOver" | "win";
 
+// Game constants
+const CANVAS_WIDTH = 800;
+const CANVAS_HEIGHT = 600;
+const PADDLE_WIDTH = 120;
+const PADDLE_HEIGHT = 15;
+const BALL_RADIUS = 8;
+const BRICK_ROWS = 6;
+const BRICK_COLS = 10;
+const BRICK_WIDTH = 70;
+const BRICK_HEIGHT = 25;
+const BRICK_PADDING = 10;
+const BRICK_OFFSET_TOP = 80;
+const BRICK_OFFSET_LEFT = 35;
+
 const ArkanoidGame = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [gameState, setGameState] = useState<GameState>("ready");
@@ -70,20 +84,6 @@ const ArkanoidGame = () => {
   const [lives, setLives] = useState(3);
   const animationFrameRef = useRef<number>();
   const keysPressed = useRef<{ [key: string]: boolean }>({});
-
-  // Game constants
-  const CANVAS_WIDTH = 800;
-  const CANVAS_HEIGHT = 600;
-  const PADDLE_WIDTH = 120;
-  const PADDLE_HEIGHT = 15;
-  const BALL_RADIUS = 8;
-  const BRICK_ROWS = 6;
-  const BRICK_COLS = 10;
-  const BRICK_WIDTH = 70;
-  const BRICK_HEIGHT = 25;
-  const BRICK_PADDING = 10;
-  const BRICK_OFFSET_TOP = 80;
-  const BRICK_OFFSET_LEFT = 35;
 
   // Visual effects
   const particles = useRef<Particle[]>([]);
@@ -112,7 +112,7 @@ const ArkanoidGame = () => {
   const bricks = useRef<Brick[]>([]);
 
   // Initialize stars for background
-  const initStars = () => {
+  const initStars = useCallback(() => {
     const newStars: Star[] = [];
     for (let i = 0; i < 100; i++) {
       newStars.push({
@@ -124,10 +124,10 @@ const ArkanoidGame = () => {
       });
     }
     stars.current = newStars;
-  };
+  }, []);
 
   // Initialize bricks
-  const initBricks = () => {
+  const initBricks = useCallback(() => {
     const colors = [
       "#FF6B6B", // Red
       "#4ECDC4", // Teal
@@ -153,10 +153,10 @@ const ArkanoidGame = () => {
     }
 
     bricks.current = newBricks;
-  };
+  }, []);
 
   // Create particle explosion
-  const createParticles = (x: number, y: number, color: string, count = 15) => {
+  const createParticles = useCallback((x: number, y: number, color: string, count = 15) => {
     for (let i = 0; i < count; i++) {
       const angle = (Math.PI * 2 * i) / count;
       const speed = 2 + Math.random() * 3;
@@ -171,10 +171,10 @@ const ArkanoidGame = () => {
         size: 3 + Math.random() * 3,
       });
     }
-  };
+  }, []);
 
   // Create score popup
-  const createScorePopup = (x: number, y: number, value: number) => {
+  const createScorePopup = useCallback((x: number, y: number, value: number) => {
     scorePopups.current.push({
       x,
       y,
@@ -182,10 +182,10 @@ const ArkanoidGame = () => {
       alpha: 1,
       vy: -1.5,
     });
-  };
+  }, []);
 
   // Reset ball position
-  const resetBall = () => {
+  const resetBall = useCallback(() => {
     ball.current = {
       x: CANVAS_WIDTH / 2,
       y: CANVAS_HEIGHT / 2,
@@ -194,10 +194,10 @@ const ArkanoidGame = () => {
       radius: BALL_RADIUS,
     };
     ballTrail.current = [];
-  };
+  }, []);
 
   // Reset game
-  const resetGame = () => {
+  const resetGame = useCallback(() => {
     setScore(0);
     setLives(3);
     initBricks();
@@ -206,24 +206,31 @@ const ArkanoidGame = () => {
     particles.current = [];
     scorePopups.current = [];
     setGameState("ready");
-  };
+  }, [initBricks, resetBall]);
 
-  // Draw starfield background
-  const drawStarfield = (ctx: CanvasRenderingContext2D) => {
+  // Helper function to adjust color brightness
+  const adjustBrightness = useCallback((color: string, amount: number): string => {
+    const hex = color.replace("#", "");
+    const r = Math.min(255, Math.max(0, parseInt(hex.substring(0, 2), 16) + amount));
+    const g = Math.min(255, Math.max(0, parseInt(hex.substring(2, 4), 16) + amount));
+    const b = Math.min(255, Math.max(0, parseInt(hex.substring(4, 6), 16) + amount));
+    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
+  }, []);
+
+  // Draw functions
+  const drawStarfield = useCallback((ctx: CanvasRenderingContext2D) => {
     stars.current.forEach((star) => {
       ctx.fillStyle = `rgba(255, 255, 255, ${star.alpha})`;
       ctx.fillRect(star.x, star.y, star.size, star.size);
 
-      // Twinkling effect
       star.alpha += star.twinkleSpeed;
       if (star.alpha > 1 || star.alpha < 0.2) {
         star.twinkleSpeed = -star.twinkleSpeed;
       }
     });
-  };
+  }, []);
 
-  // Draw ball with trail and glow
-  const drawBall = (ctx: CanvasRenderingContext2D) => {
+  const drawBall = useCallback((ctx: CanvasRenderingContext2D) => {
     const b = ball.current;
 
     // Draw trail
@@ -268,17 +275,14 @@ const ArkanoidGame = () => {
     ctx.arc(b.x - b.radius * 0.3, b.y - b.radius * 0.3, b.radius * 0.4, 0, Math.PI * 2);
     ctx.fillStyle = "rgba(255, 255, 255, 0.6)";
     ctx.fill();
-  };
+  }, []);
 
-  // Draw paddle with 3D effect
-  const drawPaddle = (ctx: CanvasRenderingContext2D) => {
+  const drawPaddle = useCallback((ctx: CanvasRenderingContext2D) => {
     const p = paddle.current;
 
-    // Shadow/glow
     ctx.shadowBlur = 20;
     ctx.shadowColor = "#6366F1";
 
-    // Main gradient
     const gradient = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.height);
     gradient.addColorStop(0, "#818CF8");
     gradient.addColorStop(0.5, "#6366F1");
@@ -287,30 +291,25 @@ const ArkanoidGame = () => {
     ctx.fillStyle = gradient;
     ctx.fillRect(p.x, p.y, p.width, p.height);
 
-    // Top highlight
     const highlightGradient = ctx.createLinearGradient(p.x, p.y, p.x, p.y + p.height * 0.4);
     highlightGradient.addColorStop(0, "rgba(255, 255, 255, 0.4)");
     highlightGradient.addColorStop(1, "rgba(255, 255, 255, 0)");
     ctx.fillStyle = highlightGradient;
     ctx.fillRect(p.x, p.y, p.width, p.height * 0.4);
 
-    // Border
     ctx.strokeStyle = "#A5B4FC";
     ctx.lineWidth = 2;
     ctx.strokeRect(p.x, p.y, p.width, p.height);
 
     ctx.shadowBlur = 0;
-  };
+  }, []);
 
-  // Draw bricks with 3D effect
-  const drawBricks = (ctx: CanvasRenderingContext2D) => {
+  const drawBricks = useCallback((ctx: CanvasRenderingContext2D) => {
     bricks.current.forEach((brick) => {
       if (brick.active) {
-        // Shadow for depth
         ctx.fillStyle = "rgba(0, 0, 0, 0.3)";
         ctx.fillRect(brick.x + 2, brick.y + 2, brick.width, brick.height);
 
-        // Main brick with gradient
         const gradient = ctx.createLinearGradient(
           brick.x,
           brick.y,
@@ -318,7 +317,6 @@ const ArkanoidGame = () => {
           brick.y + brick.height
         );
 
-        // Parse color and create lighter/darker variants
         const color = brick.color;
         gradient.addColorStop(0, color);
         gradient.addColorStop(0.5, color);
@@ -327,7 +325,6 @@ const ArkanoidGame = () => {
         ctx.fillStyle = gradient;
         ctx.fillRect(brick.x, brick.y, brick.width, brick.height);
 
-        // Top highlight for 3D effect
         const highlightGradient = ctx.createLinearGradient(
           brick.x,
           brick.y,
@@ -339,86 +336,67 @@ const ArkanoidGame = () => {
         ctx.fillStyle = highlightGradient;
         ctx.fillRect(brick.x, brick.y, brick.width, brick.height * 0.3);
 
-        // Border with glow
         ctx.strokeStyle = adjustBrightness(color, 40);
         ctx.lineWidth = 2;
         ctx.strokeRect(brick.x, brick.y, brick.width, brick.height);
 
-        // Inner border for depth
         ctx.strokeStyle = "rgba(255, 255, 255, 0.2)";
         ctx.lineWidth = 1;
         ctx.strokeRect(brick.x + 2, brick.y + 2, brick.width - 4, brick.height - 4);
       }
     });
-  };
+  }, [adjustBrightness]);
 
-  // Helper function to adjust color brightness
-  const adjustBrightness = (color: string, amount: number): string => {
-    const hex = color.replace("#", "");
-    const r = Math.min(255, Math.max(0, parseInt(hex.substring(0, 2), 16) + amount));
-    const g = Math.min(255, Math.max(0, parseInt(hex.substring(2, 4), 16) + amount));
-    const b = Math.min(255, Math.max(0, parseInt(hex.substring(4, 6), 16) + amount));
-    return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${b.toString(16).padStart(2, "0")}`;
-  };
-
-  // Draw particles
-  const drawParticles = (ctx: CanvasRenderingContext2D) => {
-    particles.current.forEach((particle, index) => {
+  const drawParticles = useCallback((ctx: CanvasRenderingContext2D) => {
+    for (let i = particles.current.length - 1; i >= 0; i--) {
+      const particle = particles.current[i];
       ctx.fillStyle = particle.color;
       ctx.globalAlpha = particle.life;
       ctx.fillRect(particle.x, particle.y, particle.size, particle.size);
       ctx.globalAlpha = 1;
 
-      // Update particle
       particle.x += particle.vx;
       particle.y += particle.vy;
-      particle.vy += 0.2; // Gravity
+      particle.vy += 0.2;
       particle.life -= 1 / (particle.maxLife * 60);
 
       if (particle.life <= 0) {
-        particles.current.splice(index, 1);
+        particles.current.splice(i, 1);
       }
-    });
-  };
+    }
+  }, []);
 
-  // Draw score popups
-  const drawScorePopups = (ctx: CanvasRenderingContext2D) => {
-    scorePopups.current.forEach((popup, index) => {
+  const drawScorePopups = useCallback((ctx: CanvasRenderingContext2D) => {
+    for (let i = scorePopups.current.length - 1; i >= 0; i--) {
+      const popup = scorePopups.current[i];
       ctx.fillStyle = `rgba(255, 215, 0, ${popup.alpha})`;
       ctx.font = "bold 24px Arial";
       ctx.textAlign = "center";
       ctx.fillText(`+${popup.value}`, popup.x, popup.y);
 
-      // Update popup
       popup.y += popup.vy;
       popup.alpha -= 0.02;
 
       if (popup.alpha <= 0) {
-        scorePopups.current.splice(index, 1);
+        scorePopups.current.splice(i, 1);
       }
-    });
+    }
     ctx.textAlign = "left";
-  };
+  }, []);
 
-  // Draw enhanced UI
-  const drawUI = (ctx: CanvasRenderingContext2D) => {
-    // HUD background
+  const drawUI = useCallback((ctx: CanvasRenderingContext2D, currentScore: number, currentLives: number) => {
     ctx.fillStyle = "rgba(15, 15, 35, 0.8)";
     ctx.fillRect(0, 0, CANVAS_WIDTH, 60);
 
-    // Score
     ctx.fillStyle = "#FFFFFF";
     ctx.font = "bold 28px Arial";
     ctx.shadowBlur = 10;
     ctx.shadowColor = "#60A5FA";
-    ctx.fillText(`SCORE: ${score}`, 30, 40);
-
-    // Lives
-    ctx.fillText(`LIVES: ${lives}`, CANVAS_WIDTH - 180, 40);
+    ctx.fillText(`SCORE: ${currentScore}`, 30, 40);
+    ctx.fillText(`LIVES: ${currentLives}`, CANVAS_WIDTH - 180, 40);
     ctx.shadowBlur = 0;
 
-    // Draw life icons
-    for (let i = 0; i < lives; i++) {
+    for (let i = 0; i < currentLives; i++) {
       const heartX = CANVAS_WIDTH - 150 + i * 35;
       const heartY = 25;
 
@@ -433,19 +411,16 @@ const ArkanoidGame = () => {
       ctx.lineTo(heartX + 18, heartY);
       ctx.fill();
     }
-  };
+  }, []);
 
-  // Draw game state with enhanced effects
-  const drawGameState = (ctx: CanvasRenderingContext2D) => {
+  const drawGameState = useCallback((ctx: CanvasRenderingContext2D, state: GameState, currentScore: number) => {
     ctx.fillStyle = "rgba(0, 0, 0, 0.85)";
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
     const pulse = Math.sin(time.current * 0.05) * 0.3 + 0.7;
-
     ctx.textAlign = "center";
 
-    if (gameState === "ready") {
-      // Animated title
+    if (state === "ready") {
       ctx.shadowBlur = 30 * pulse;
       ctx.shadowColor = "#60A5FA";
       ctx.fillStyle = "#FFFFFF";
@@ -461,7 +436,7 @@ const ArkanoidGame = () => {
       ctx.font = "20px Arial";
       ctx.fillStyle = "#9CA3AF";
       ctx.fillText("Use ← → or A D to move paddle", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 70);
-    } else if (gameState === "paused") {
+    } else if (state === "paused") {
       ctx.shadowBlur = 20;
       ctx.shadowColor = "#F59E0B";
       ctx.fillStyle = "#FFFFFF";
@@ -472,7 +447,7 @@ const ArkanoidGame = () => {
       ctx.font = "24px Arial";
       ctx.fillStyle = `rgba(251, 191, 36, ${pulse})`;
       ctx.fillText("Press SPACE to continue", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 50);
-    } else if (gameState === "gameOver") {
+    } else if (state === "gameOver") {
       ctx.shadowBlur = 30;
       ctx.shadowColor = "#EF4444";
       ctx.fillStyle = "#FFFFFF";
@@ -482,13 +457,13 @@ const ArkanoidGame = () => {
       ctx.shadowBlur = 15;
       ctx.font = "32px Arial";
       ctx.fillStyle = "#FCA5A5";
-      ctx.fillText(`Final Score: ${score}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 30);
+      ctx.fillText(`Final Score: ${currentScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 30);
 
       ctx.shadowBlur = 10;
       ctx.font = "24px Arial";
       ctx.fillStyle = `rgba(252, 165, 165, ${pulse})`;
       ctx.fillText("Press R to restart", CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 80);
-    } else if (gameState === "win") {
+    } else if (state === "win") {
       ctx.shadowBlur = 40;
       ctx.shadowColor = "#10B981";
       ctx.fillStyle = "#FFFFFF";
@@ -498,7 +473,7 @@ const ArkanoidGame = () => {
       ctx.shadowBlur = 20;
       ctx.font = "32px Arial";
       ctx.fillStyle = "#6EE7B7";
-      ctx.fillText(`Final Score: ${score}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 30);
+      ctx.fillText(`Final Score: ${currentScore}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 30);
 
       ctx.shadowBlur = 10;
       ctx.font = "24px Arial";
@@ -508,10 +483,10 @@ const ArkanoidGame = () => {
 
     ctx.shadowBlur = 0;
     ctx.textAlign = "left";
-  };
+  }, []);
 
-  // Collision detection
-  const checkBallBrickCollision = () => {
+  // Collision detection and update
+  const checkBallBrickCollision = useCallback(() => {
     const b = ball.current;
 
     for (let i = 0; i < bricks.current.length; i++) {
@@ -546,7 +521,6 @@ const ArkanoidGame = () => {
           brick.active = false;
           setScore((prev) => prev + brick.points);
 
-          // Visual effects
           createParticles(brickCenterX, brickCenterY, brick.color);
           createScorePopup(brickCenterX, brickCenterY, brick.points);
 
@@ -554,9 +528,9 @@ const ArkanoidGame = () => {
         }
       }
     }
-  };
+  }, [createParticles, createScorePopup]);
 
-  const checkBallPaddleCollision = () => {
+  const checkBallPaddleCollision = useCallback(() => {
     const b = ball.current;
     const p = paddle.current;
 
@@ -574,122 +548,142 @@ const ArkanoidGame = () => {
       b.dy = -Math.abs(Math.cos(angle) * speed);
       b.y = p.y - b.radius;
 
-      // Create small particle effect on paddle hit
       createParticles(b.x, p.y, "#818CF8", 5);
     }
-  };
-
-  // Update game
-  const update = () => {
-    time.current++;
-
-    if (gameState !== "playing") return;
-
-    const b = ball.current;
-    const p = paddle.current;
-
-    // Add to ball trail
-    ballTrail.current.push({ x: b.x, y: b.y, alpha: 1 });
-    if (ballTrail.current.length > 15) {
-      ballTrail.current.shift();
-    }
-    ballTrail.current.forEach((trail, i) => {
-      trail.alpha = i / ballTrail.current.length;
-    });
-
-    // Move ball
-    b.x += b.dx;
-    b.y += b.dy;
-
-    // Ball collision with walls
-    if (b.x + b.radius > CANVAS_WIDTH || b.x - b.radius < 0) {
-      b.dx = -b.dx;
-      createParticles(b.x, b.y, "#93C5FD", 8);
-    }
-
-    if (b.y - b.radius < 60) {
-      b.dy = -b.dy;
-      createParticles(b.x, b.y, "#93C5FD", 8);
-    }
-
-    // Ball falls below paddle
-    if (b.y - b.radius > CANVAS_HEIGHT) {
-      setLives((prev) => {
-        const newLives = prev - 1;
-        if (newLives <= 0) {
-          setGameState("gameOver");
-        } else {
-          resetBall();
-          setGameState("ready");
-        }
-        return newLives;
-      });
-    }
-
-    // Move paddle
-    if (keysPressed.current["ArrowLeft"] || keysPressed.current["a"]) {
-      p.x -= p.speed;
-    }
-    if (keysPressed.current["ArrowRight"] || keysPressed.current["d"]) {
-      p.x += p.speed;
-    }
-
-    // Keep paddle in bounds
-    if (p.x < 0) p.x = 0;
-    if (p.x + p.width > CANVAS_WIDTH) p.x = CANVAS_WIDTH - p.width;
-
-    // Check collisions
-    checkBallPaddleCollision();
-    checkBallBrickCollision();
-
-    // Check win condition
-    const activeBricks = bricks.current.filter((b) => b.active).length;
-    if (activeBricks === 0) {
-      setGameState("win");
-    }
-  };
-
-  // Render
-  const render = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    // Background with gradient
-    const bgGradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
-    bgGradient.addColorStop(0, "#0F0F23");
-    bgGradient.addColorStop(0.5, "#1a1a3e");
-    bgGradient.addColorStop(1, "#0F0F23");
-    ctx.fillStyle = bgGradient;
-    ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-
-    // Draw starfield
-    drawStarfield(ctx);
-
-    // Draw game objects
-    drawBricks(ctx);
-    drawParticles(ctx);
-    drawPaddle(ctx);
-    drawBall(ctx);
-    drawScorePopups(ctx);
-    drawUI(ctx);
-
-    // Draw game state overlay
-    if (gameState !== "playing") {
-      drawGameState(ctx);
-    }
-  };
+  }, [createParticles]);
 
   // Game loop
-  const gameLoop = () => {
-    update();
-    render();
-    animationFrameRef.current = requestAnimationFrame(gameLoop);
-  };
+  useEffect(() => {
+    initStars();
+    initBricks();
 
-  // Keyboard event handlers
+    const gameLoop = () => {
+      time.current++;
+
+      // Update
+      if (gameState === "playing") {
+        const b = ball.current;
+        const p = paddle.current;
+
+        // Ball trail
+        ballTrail.current.push({ x: b.x, y: b.y, alpha: 1 });
+        if (ballTrail.current.length > 15) {
+          ballTrail.current.shift();
+        }
+        ballTrail.current.forEach((trail, i) => {
+          trail.alpha = i / ballTrail.current.length;
+        });
+
+        // Move ball
+        b.x += b.dx;
+        b.y += b.dy;
+
+        // Wall collisions
+        if (b.x + b.radius > CANVAS_WIDTH || b.x - b.radius < 0) {
+          b.dx = -b.dx;
+          createParticles(b.x, b.y, "#93C5FD", 8);
+        }
+
+        if (b.y - b.radius < 60) {
+          b.dy = -b.dy;
+          createParticles(b.x, b.y, "#93C5FD", 8);
+        }
+
+        // Ball falls
+        if (b.y - b.radius > CANVAS_HEIGHT) {
+          setLives((prev) => {
+            const newLives = prev - 1;
+            if (newLives <= 0) {
+              setGameState("gameOver");
+            } else {
+              resetBall();
+              setGameState("ready");
+            }
+            return newLives;
+          });
+        }
+
+        // Move paddle
+        if (keysPressed.current["ArrowLeft"] || keysPressed.current["a"]) {
+          p.x -= p.speed;
+        }
+        if (keysPressed.current["ArrowRight"] || keysPressed.current["d"]) {
+          p.x += p.speed;
+        }
+
+        // Paddle bounds
+        if (p.x < 0) p.x = 0;
+        if (p.x + p.width > CANVAS_WIDTH) p.x = CANVAS_WIDTH - p.width;
+
+        // Collisions
+        checkBallPaddleCollision();
+        checkBallBrickCollision();
+
+        // Win condition
+        const activeBricks = bricks.current.filter((b) => b.active).length;
+        if (activeBricks === 0) {
+          setGameState("win");
+        }
+      }
+
+      // Render
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+
+      // Background
+      const bgGradient = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
+      bgGradient.addColorStop(0, "#0F0F23");
+      bgGradient.addColorStop(0.5, "#1a1a3e");
+      bgGradient.addColorStop(1, "#0F0F23");
+      ctx.fillStyle = bgGradient;
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+      drawStarfield(ctx);
+      drawBricks(ctx);
+      drawParticles(ctx);
+      drawPaddle(ctx);
+      drawBall(ctx);
+      drawScorePopups(ctx);
+      drawUI(ctx, score, lives);
+
+      if (gameState !== "playing") {
+        drawGameState(ctx, gameState, score);
+      }
+
+      animationFrameRef.current = requestAnimationFrame(gameLoop);
+    };
+
+    gameLoop();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [
+    gameState,
+    score,
+    lives,
+    initStars,
+    initBricks,
+    createParticles,
+    resetBall,
+    checkBallPaddleCollision,
+    checkBallBrickCollision,
+    drawStarfield,
+    drawBricks,
+    drawParticles,
+    drawPaddle,
+    drawBall,
+    drawScorePopups,
+    drawUI,
+    drawGameState,
+  ]);
+
+  // Keyboard handlers
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       keysPressed.current[e.key] = true;
@@ -723,30 +717,13 @@ const ArkanoidGame = () => {
       window.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("keyup", handleKeyUp);
     };
-  }, [gameState]);
-
-  // Initialize game
-  useEffect(() => {
-    initStars();
-    initBricks();
-    gameLoop();
-
-    return () => {
-      if (animationFrameRef.current) {
-        cancelAnimationFrame(animationFrameRef.current);
-      }
-    };
-  }, []);
-
-  // Restart game loop when game state changes
-  useEffect(() => {
-    if (gameState === "playing" && !animationFrameRef.current) {
-      gameLoop();
-    }
-  }, [gameState]);
+  }, [gameState, resetGame]);
 
   return (
-    <div className="flex flex-col items-center gap-6">
+    <div className="flex flex-col items-center justify-center min-h-screen gap-6 p-4">
+      <h1 className="text-5xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 via-purple-400 to-pink-400">
+        ARKANOID
+      </h1>
       <canvas
         ref={canvasRef}
         width={CANVAS_WIDTH}
@@ -756,13 +733,13 @@ const ArkanoidGame = () => {
           boxShadow: "0 0 40px rgba(99, 102, 241, 0.5), 0 0 80px rgba(99, 102, 241, 0.3)",
         }}
       />
-      <div className="text-white text-center bg-slate-900/50 px-6 py-3 rounded-lg border border-indigo-500/30">
+      <div className="text-white text-center bg-slate-900/50 px-6 py-3 rounded-lg border border-indigo-500/30 backdrop-blur-sm">
         <p className="text-sm font-medium text-slate-300">
-          <span className="text-indigo-400">Controls:</span> Arrow Keys or A/D{" "}
+          <span className="text-indigo-400 font-bold">Controls:</span> Arrow Keys or A/D{" "}
           <span className="mx-2 text-slate-600">|</span>
-          <span className="text-indigo-400">Space:</span> Start/Pause{" "}
+          <span className="text-indigo-400 font-bold">Space:</span> Start/Pause{" "}
           <span className="mx-2 text-slate-600">|</span>
-          <span className="text-indigo-400">R:</span> Restart
+          <span className="text-indigo-400 font-bold">R:</span> Restart
         </p>
       </div>
     </div>
